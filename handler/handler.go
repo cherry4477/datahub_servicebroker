@@ -20,6 +20,7 @@ type ServiceInfo struct {
 	Database       string `json:"database,omitempty"`
 	User           string `json:"user"`
 	Password       string `json:"password"`
+	ServiceBrokerNamespace string `json:"serviceBrokerNamespace"`
 }
 
 type Credentials struct {
@@ -117,115 +118,49 @@ func EndPointSuffix() string {
 	return endpointSuffix
 }
 
-func EtcdImage() string {
-	return etcdImage
+func DatahubImage() string {
+	return datahubImage
 }
 
-func EtcdbootImage() string {
-	return etcdbootImage
+func MysqlAddrPort() string {
+	return mysqlAddrPort
 }
 
-func ZookeeperImage() string {
-	return zookeeperImage
+//func MysqlDatabase() string {
+//	return mysqlDatabase
+//}
+
+func MysqlUser() string {
+	return mysqlUser
 }
 
-func ZookeeperExhibitorImage() string {
-	return zookeeperexhibitorImage
+func MysqlPassword() string {
+	return mysqlPassword
 }
-
-func RedisImage() string {
-	return redisImage
-}
-
-func RedisPhpAdminImage() string {
-	return redisphpadminImage
-}
-
-func KafkaImage() string {
-	return kafkaImage
-}
-
-func StormImage() string {
-	return stormImage
-}
-
-func CassandraImage() string {
-	return cassandraImage
-}
-
-func TensorFlowImage() string {
-	return tensorflowImage
-}
-
-func NiFiImage() string {
-	return nifiImage
-}
-
-func KettleImage() string {
-	return kettleImage
-}
-
-func SimpleFileUplaoderImage() string {
-	return simplefileuplaoderImage
-}
-
-func RabbitmqImage() string {
-	return rabbitmqImage
-}
-
-func SparkImage() string {
-	return sparkImage
-}
-
-func ZepplinImage() string {
-	return zepplinImage
-}
-
 
 var theOC *OpenshiftClient
 var endpointSuffix string
 
-var etcdImage string
-var etcdbootImage string
-var zookeeperImage string
-var zookeeperexhibitorImage string
-var redisImage string
-var redisphpadminImage string
-var kafkaImage string
-var stormImage string
-var cassandraImage string
-var tensorflowImage string
-var nifiImage string
-var kettleImage string
-var simplefileuplaoderImage string
-var rabbitmqImage string
-var sparkImage string
-var zepplinImage string
+var datahubImage string
+
+var mysqlAddrPort string
+var mysqlDatabase string
+var mysqlUser string
+var mysqlPassword string
 
 func init() {
-	theOC = newOpenshiftClient (
-		getenv("OPENSHIFTADDR"), 
-		getenv("OPENSHIFTUSER"), 
+	theOC = newOpenshiftClient(
+		getenv("OPENSHIFTADDR"),
+		getenv("OPENSHIFTUSER"),
 		getenv("OPENSHIFTPASS"),
 		getenv("SBNAMESPACE"),
 	)
-	
-	endpointSuffix = getenv("ENDPOINTSUFFIX")
-	etcdImage = getenv("ETCDIMAGE")
-	etcdbootImage = getenv("ETCDBOOTIMAGE")
-	zookeeperImage = getenv("ZOOKEEPERIMAGE")
-	zookeeperexhibitorImage = getenv("ZOOKEEPEREXHIBITORIMAGE")
-	redisImage = getenv("REDISIMAGE")
-	redisphpadminImage = getenv("REDISPHPADMINIMAGE")
-	kafkaImage = getenv("KAFKAIMAGE")
-	stormImage = getenv("STORMIMAGE")
-	cassandraImage = getenv("CASSANDRAIMAGE")
-	tensorflowImage = getenv("TENSORFLOWIMAGE")
-	nifiImage = getenv("NIFIIMAGE")
-	kettleImage = getenv("KETTLEIMAGE")
-	simplefileuplaoderImage = getenv("SIMPLEFILEUPLOADERIMAGE")
-	rabbitmqImage = getenv("RABBITMQIMAGE")
-	sparkImage = getenv("SPARKIMAGE")
-	zepplinImage = getenv("ZEPPLINIMAGE")
-}
 
+	endpointSuffix = getenv("ENDPOINTSUFFIX")
+	datahubImage = getenv("DATAHUBIMAGE")
+
+	mysqlAddrPort = getenv("MYSQLADDRPORT")
+	//mysqlDatabase = getenv("MYSQLDATABASE")
+	mysqlUser = getenv("MYSQLUSER")
+	mysqlPassword = getenv("MYSQLPASSWORD")
+}

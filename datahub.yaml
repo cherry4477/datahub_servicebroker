@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  labels:
+    servicebroker: sb-instanceid-datahub
+  name: sb-instanceid-datahub
+spec:
+  replicas: 1
+  selector:
+    servicebroker: sb-instanceid-datahub
+  template:
+    metadata:
+      labels:
+        servicebroker: sb-instanceid-datahub
+    spec:
+      containers:
+      - image: http://datahub-image-place-holder/nifi-openshift-orchestration
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: SCREENLOG
+            value: "1"
+          - name: DAEMON_TOKEN
+            value: daemon-token-replace
+          - name: DATAHUB_CLI_ENTRYPOINT
+            value: sb-instanceid-datahub.endpoint-postfix-place-holder
+          - name: DAEMON_ENTRYPOINT
+            value: sb-instanceid-datahub-entrypoint.endpoint-postfix-place-holder
+          - name: DB_TYPE
+            value: "MYSQL"
+          - name: MYSQL_PORT_3306_TCP_ADDR
+            value: mysql-addr-replace
+          - name: MYSQL_PORT_3306_TCP_PORT
+            value: "3306"
+          - name: MYSQL_ENV_MYSQL_DATABASE
+            value: mysql-database-replace
+          - name: MYSQL_ENV_MYSQL_USER
+            value: mysql-user-replace
+          - name: MYSQL_ENV_MYSQL_PASSWORD
+            value: mysql-password-replace
+        name: sb-instanceid-datahub
+        resources:
+          limits:
+            cpu: 0.1
+        ports:
+        - containerPort: 35600
+        - containerPort: 35800
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Route
+metadata:
+  annotations:
+    openshift.io/host.generated: "true"
+  name: sb-instanceid-datahub
+  labels:
+    servicebroker: sb-instanceid-datahub
+spec:
+  host: sb-instanceid-datahub.endpoint-postfix-place-holder
+  port:
+    targetPort: web
+  to:
+    kind: Service
+    name: sb-instanceid-datahub
+---
+apiVersion: v1
+kind: Route
+metadata:
+  annotations:
+    openshift.io/host.generated: "true"
+  name: sb-instanceid-datahub-entrypoint
+  labels:
+    servicebroker: sb-instanceid-datahub
+spec:
+  host: sb-instanceid-datahub-enytrypoint.endpoint-postfix-place-holder
+  port:
+    targetPort: enytrypoint
+  to:
+    kind: Service
+    name: sb-instanceid-datahub
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    servicebroker: sb-instanceid-datahub
+  name: sb-instanceid-datahub
+spec:
+  ports:
+  - port: 35600
+    name: web
+  - port: 35800
+    name: enytrypoint
+  selector:
+    servicebroker: sb-instanceid-datahub
