@@ -23,6 +23,8 @@ spec:
             value: daemon-token-replace
           - name: DATAHUB_CLI_ENTRYPOINT
             value: sb-instanceid-datahub.endpoint-postfix-place-holder
+          - name: DATAHUB_DAEMON_SERVER
+            value: "0.0.0.0:35600"
           - name: DAEMON_ENTRYPOINT
             value: sb-instanceid-datahub-entrypoint.endpoint-postfix-place-holder
           - name: DB_TYPE

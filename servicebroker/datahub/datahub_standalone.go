@@ -13,7 +13,6 @@ import (
 	//"time"
 	"bytes"
 	"encoding/json"
-	"strconv"
 	"strings"
 	//"crypto/sha1"
 	//"encoding/base64"
@@ -29,9 +28,14 @@ import (
 	routeapi "github.com/openshift/origin/route/api/v1"
 	kapi "k8s.io/kubernetes/pkg/api/v1"
 
-	oshandler "github.com/asiainfoLDP/datahub_servicebroker/handler"
 	"database/sql"
+	oshandler "github.com/asiainfoLDP/datahub_servicebroker/handler"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/s3"
 	_ "github.com/go-sql-driver/mysql"
+	"net/http"
 )
 
 //==============================================================
@@ -39,6 +43,7 @@ import (
 //==============================================================
 
 const DataHubServcieBrokerName_Standalone = "DataHub_standalone"
+const S3REGION = "cn-north-1"
 
 func init() {
 	oshandler.Register(DataHubServcieBrokerName_Standalone, &DataHub_Handler{})
@@ -52,6 +57,12 @@ var logger lager.Logger
 var mysqlDatabase string
 var mysqlUser string
 var mysqlPassword string
+
+type dpCreate struct {
+	Name string `json:"dpname, omitempty"`
+	Type string `json:"dptype, omitempty"`
+	Conn string `json:"dpconn, omitempty"`
+}
 
 //==============================================================
 //
@@ -83,7 +94,7 @@ var mysqlPassword string
 //
 //==============================================================
 
-type DataHub_Handler struct {}
+type DataHub_Handler struct{}
 
 //func newNiFiHandler() *NiFi_Handler {
 //	return &NiFi_Handler{}
@@ -102,13 +113,11 @@ func (handler *DataHub_Handler) DoProvision(instanceID string, details brokerapi
 
 	serviceBrokerNamespace := oshandler.OC().Namespace()
 
-
 	var daemonToken string
 	paras := details.Parameters
 	if v, ok := paras["token"]; ok {
 		daemonToken = v.(string)
 	}
-
 	println(daemonToken)
 
 	mysqlDatabase = daemonToken
@@ -119,28 +128,12 @@ func (handler *DataHub_Handler) DoProvision(instanceID string, details brokerapi
 		return serviceSpec, serviceInfo, err
 	}
 	println("create database done......")
-
-	//初始化到openshift的链接
-
-
-
-	//if asyncAllowed == false {
-	//	return serviceSpec, serviceInfo, errors.New("Sync mode is not supported")
-	//}
-
-	//instanceIdInTempalte   := instanceID // todo: ok?
-	//instanceIdInTempalte := strings.ToLower(oshandler.NewThirteenLengthID())
-	//serviceBrokerNamespace := ServiceBrokerNamespace
-	//serviceBrokerNamespace := oshandler.OC().Namespace()
-	//datahubUser := ""     // oshandler.NewElevenLengthID()
-	//datahubPassword := "" // oshandler.GenGUID()
+	//=====================================================================================================
 
 	println()
 	println("instanceIdInTempalte = ", instanceIdInTempalte)
 	println("serviceBrokerNamespace = ", serviceBrokerNamespace)
 	println()
-
-	// master nifi
 
 	output, err := createDataHubResources(instanceIdInTempalte, serviceBrokerNamespace, daemonToken)
 	if err != nil {
@@ -149,6 +142,7 @@ func (handler *DataHub_Handler) DoProvision(instanceID string, details brokerapi
 		return serviceSpec, serviceInfo, err
 	}
 	println("createDataHubResources done......")
+	//=====================================================================================================
 
 	serviceInfo.Url = mysqlUrl
 	serviceInfo.Admin_user = "root"
@@ -158,15 +152,11 @@ func (handler *DataHub_Handler) DoProvision(instanceID string, details brokerapi
 	serviceInfo.Password = mysqlPassword
 	serviceInfo.ServiceBrokerNamespace = serviceBrokerNamespace
 
-
-	//serviceInfo.Password = datahubPassword
-
-
-	serviceSpec.DashboardURL = fmt.Sprintf("http://%s/   mysql://" +
-	mysqlUser + ":" +
-	mysqlPassword + "@" +
-	strings.Split(mysqlUrl, ":")[0] + ":" +
-	strings.Split(mysqlUrl, ":")[1] + "?db=%s", output.route.Spec.Host, mysqlDatabase)
+	serviceSpec.DashboardURL = fmt.Sprintf("http://%s/   mysql://"+
+		mysqlUser+":"+
+		mysqlPassword+"@"+
+		strings.Split(mysqlUrl, ":")[0]+":"+
+		strings.Split(mysqlUrl, ":")[1]+"?db=%s", output.route.Spec.Host, mysqlDatabase)
 
 	return serviceSpec, serviceInfo, nil
 }
@@ -228,29 +218,126 @@ func (handler *DataHub_Handler) DoDeprovision(myServiceInfo *oshandler.ServiceIn
 }
 
 func (handler *DataHub_Handler) DoBind(myServiceInfo *oshandler.ServiceInfo, bindingID string, details brokerapi.BindDetails) (brokerapi.Binding, oshandler.Credentials, error) {
-	// todo: handle errors
+	println("DoBind......")
+	println()
 
-	master_res, err := getDataHubResources(myServiceInfo.Url, myServiceInfo.Database, myServiceInfo.User)
+	//Creates a new bucket.
+	s3Svc := s3.New(session.New(), aws.NewConfig().WithRegion(S3REGION))
+
+	createBucketParams := &s3.CreateBucketInput{
+		Bucket: aws.String(myServiceInfo.Database), // Required
+	}
+	_, err := s3Svc.CreateBucket(createBucketParams)
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+	println("create bucket done......")
+	println()
+	//==========================================================================================
+	//create a user
+	iamSvc := iam.New(session.New(), aws.NewConfig().WithRegion(S3REGION))
+
+	createUserParams := &iam.CreateUserInput{
+		UserName: aws.String(myServiceInfo.User), // Required
+	}
+	_, err = iamSvc.CreateUser(createUserParams)
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+	println("create a user......")
+	println()
+	//==========================================================================================
+	//create accessKey for user
+	//svc := iam.New(session.New(), aws.NewConfig().WithRegion("cn-north-1"))
+	//
+	createAccessKeyParams := &iam.CreateAccessKeyInput{
+		UserName: aws.String(myServiceInfo.User),
+	}
+	iamResp, err := iamSvc.CreateAccessKey(createAccessKeyParams)
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+	accessKeyId := iamResp.AccessKey.AccessKeyId
+	secretAccessKey := iamResp.AccessKey.SecretAccessKey
+	println("create accessKey for user done......")
+	println()
+	//==========================================================================================
+	//Adds or updates an inline policy document that is embedded in the specified IAM user.
+	//svc := iam.New(session.New(), aws.NewConfig().WithRegion("cn-north-1"))
+	//
+	jsonDocument := `{
+			    "Statement": [
+				{
+				    "Effect": "Allow",
+				    "Action": [
+					"s3:GetObject",
+					"s3:PutObject"
+				    ],
+				    "Resource": [
+					"arn:aws-cn:s3:::bucketName/*"
+				    ]
+				},
+				{
+				    "Effect": "Allow",
+				    "Action": [
+					"s3:ListBucket"
+				    ],
+				    "Resource": [
+					"arn:aws-cn:s3:::bucketName"
+				    ]
+				}
+			    ]
+			}`
+	jsonDocument = strings.Replace(jsonDocument, "bucketName", myServiceInfo.Database, -1)
+
+	println(jsonDocument)
+	println()
+
+	putUserPolicyParams := &iam.PutUserPolicyInput{
+		PolicyDocument: aws.String(jsonDocument),       // Required
+		PolicyName:     aws.String(myServiceInfo.User), // Required
+		UserName:       aws.String(myServiceInfo.User), // Required
+	}
+	_, err = iamSvc.PutUserPolicy(putUserPolicyParams)
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+	println("create policy done......")
+	println()
+	//==========================================================================================
+
+	output, err := getDataHubResources(myServiceInfo.User, myServiceInfo.ServiceBrokerNamespace, myServiceInfo.Database)
 	if err != nil {
 		return brokerapi.Binding{}, oshandler.Credentials{}, err
 	}
 
-	web_port := oshandler.GetServicePortByName(&master_res.service, "web")
-	if web_port == nil {
-		return brokerapi.Binding{}, oshandler.Credentials{}, errors.New("web port not found")
+	dpconn := myServiceInfo.Database + "##" + *accessKeyId + "##" + *secretAccessKey + "##" + S3REGION
+	dp := dpCreate{
+		Name: "s3dp",
+		Type: "s3",
+		Conn: dpconn,
 	}
 
-	host := fmt.Sprintf("%s.%s.svc.cluster.local", master_res.service.Name, myServiceInfo.Database)
-	port := strconv.Itoa(web_port.Port)
-	//host := master_res.routeMQ.Spec.Host
-	//port := "80"
+	reqBody, err := json.Marshal(dp)
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+
+	resp, err := http.Post("http://"+output.route.Spec.Host+"/api/datapools", "application/json;charset=utf-8", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return brokerapi.Binding{}, oshandler.Credentials{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		return brokerapi.Binding{}, oshandler.Credentials{}, errors.New(string(b))
+	}
+	println("create datapool done......")
+	println()
+	//==========================================================================================
 
 	mycredentials := oshandler.Credentials{
-		Uri:      "",
-		Hostname: host,
-		Port:     port,
-		Username: myServiceInfo.User,
-		Password: myServiceInfo.Password,
+		Name: "s3dp",
+		Uri:  "s3://" + dpconn,
 	}
 
 	myBinding := brokerapi.Binding{Credentials: mycredentials}
@@ -643,7 +730,7 @@ func createDatabaseForUser(dbname, user, password string) error {
 	return err
 }
 
-func dropDatabaseForUser(url, adminUser, adminPassword, database, user string ) error {
+func dropDatabaseForUser(url, adminUser, adminPassword, database, user string) error {
 	db, err := sql.Open("mysql", adminUser+":"+adminPassword+"@tcp("+url+")/")
 
 	if err != nil {
